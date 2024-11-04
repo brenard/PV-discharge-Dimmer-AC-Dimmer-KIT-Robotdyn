@@ -1,0 +1,46 @@
+name: Build all supported platforms firmware & filesystems
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio/.cache
+            ~/.venv
+          key: ${{ runner.os }}-pio
+      - name: Install requirements
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends lsb-release git python3-pip python3-venv curl gzip
+          python3 -m venv ~/.venv
+          ~/.venv/bin/python -m pip install mako
+      - name: Install PlatformIO Core
+        run: ~/.venv/bin/python -m pip install platformio
+      - name: Build firmware for all supported platforms
+        run: ~/.venv/bin/pio run
+      - name: Generate filesystem content
+        run: |
+          source ~/.venv/bin/activate
+          ./data-templates/generate-data.sh
+      - name: Build filesystem for all supported platforms
+        run: ~/.venv/bin/pio run -t buildfs
+      - name: Prepare distribution files
+        run: |
+          mkdir dist
+          for file in .pio/build/*/*.bin; do
+            platform="$( basename "$( dirname "$file" )" )"
+            mv "$file" "dist/${platform}-$( basename "$file" )"
+          done
+      - name: Upload built files
+        uses: actions/upload-artifact@v3
+        with:
+          name: dist
+          path: |
+            dist/*.bin
