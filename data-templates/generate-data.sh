@@ -159,4 +159,7 @@ done
 echo "done."
 
 # Generate HTML files using generate-html-files.py script
+python -m pip install mako
 python "$SRC_DIR/generate-html-files.py"
+
+[[ -z "$GITHUB_RUN_ID" ]] && read -p "Press [Enter] to exit."
