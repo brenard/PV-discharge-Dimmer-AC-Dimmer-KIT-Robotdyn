@@ -1,6 +1,6 @@
 name: Build all supported platforms firmware & filesystems
 
-on: [push]
+on: push
 
 jobs:
   build:
@@ -24,23 +24,53 @@ jobs:
       - name: Install PlatformIO Core
         run: ~/.venv/bin/python -m pip install platformio
       - name: Build firmware for all supported platforms
-        run: ~/.venv/bin/pio run
+        run: ~/.venv/bin/pio run -e SSR-Burst-Revisited
       - name: Generate filesystem content
         run: |
           source ~/.venv/bin/activate
           ./data-templates/generate-data.sh
       - name: Build filesystem for all supported platforms
-        run: ~/.venv/bin/pio run -t buildfs
+        run: ~/.venv/bin/pio run -t buildfs -e SSR-Burst-Revisited
       - name: Prepare distribution files
         run: |
           mkdir dist
           for file in .pio/build/*/*.bin; do
             platform="$( basename "$( dirname "$file" )" )"
-            mv "$file" "dist/${platform}-$( basename "$file" )"
+            gzip --stdout "$file" > "dist/${platform}-$( basename "$file" ).gz"
           done
       - name: Upload built files
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4.4.3
         with:
           name: dist
           path: |
-            dist/*.bin
+            dist/*.bin.gz
+
+  publish:
+    runs-on: ubuntu-latest
+    if: ${{ ! startsWith(github.ref, 'refs/tags/') }}
+    needs: build
+
+    steps:
+      - name: "Download built files"
+        uses: actions/download-artifact@v4.1.8
+        with:
+          name: dist
+      - name: Generate changelog
+        id: changelog
+        uses: mikepenz/release-changelog-builder-action@v5.0.0
+        with:
+          mode: "COMMIT"
+      - name: Create release
+        uses: softprops/action-gh-release@v2.0.9
+        id: create_release
+        with:
+          draft: false
+          prerelease: false
+          tag_name: ${{ steps.changelog.outputs.toTag }}
+          name: ${{ steps.changelog.outputs.toTag }}
+          body: ${{ steps.changelog.outputs.changelog }}
+          make_latest: "true"
+          files: |
+            *.bin.gz
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
